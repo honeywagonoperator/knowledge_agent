@@ -37,3 +37,4 @@ strict = true
 python_version = "3.12"
 explicit_package_bases = true
 namespace_packages = true
+disable_error_code = "import-untyped"

@@ -16,7 +16,7 @@ console = Console()
 
 
 @click.group()
-def cli():
+def cli() -> None:
     pass
 
 
@@ -27,7 +27,7 @@ def cli():
 @click.option("--name", default=None, help="Optional source name")
 def add_source(url: str, source_type: str, name: str | None) -> None:
     """Add a new knowledge source (URL or Telegram)."""
-    async def _run():
+    async def _run() -> None:
         from knowledge_engine.models.source import SourceType as ST
         factory = async_session_factory()
         async with factory() as s:
@@ -43,7 +43,7 @@ def add_source(url: str, source_type: str, name: str | None) -> None:
 @click.option("--source-id", required=True, help="Source UUID to sync")
 def sync(source_id: str) -> None:
     """Synchronize a source (fetch, index, build graph)."""
-    async def _run():
+    async def _run() -> None:
         from knowledge_engine.connectors.sync_service import SyncService
         from knowledge_engine.connectors.url import URLConnector
         factory = async_session_factory()
@@ -101,7 +101,7 @@ def graph_explore(entity: str, depth: int) -> None:
 @cli.command()
 def list_sources() -> None:
     """List all configured sources."""
-    async def _run():
+    async def _run() -> None:
         factory = async_session_factory()
         async with factory() as s:
             repo = Repository(s, Source)
@@ -130,7 +130,7 @@ def list_sources() -> None:
 @cli.command()
 def status() -> None:
     """Show knowledge base statistics."""
-    async def _run():
+    async def _run() -> None:
         factory = async_session_factory()
         async with factory() as s:
             source_repo = Repository(s, Source)
