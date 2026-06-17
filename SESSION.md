@@ -155,6 +155,31 @@
 
 ---
 
+## 2026-06-17 — Phase A-3+4: All 21 tests pass!
+
+**Action:** Исправил баги и добился 21/21 зелёных тестов
+
+**Fixes:**
+1. `entity.py:18` — добавлен `timezone` в импорт (`from datetime import datetime, timezone`)
+2. `session.py` — `expire_on_commit=False` оставлен (нужен для asyncpg), но `Repository.get()` использует `populate_existing=True` для корректного чтения после cascade delete
+3. `pyproject.toml` — исправлен TOML синтаксис (новые строки внутри строк, build-backend)
+4. `docker-compose.yml` — pgvector/pg:16 вместо pg:17 (образ в 4× меньше)
+5. `connectors/base.py` — восстановлен BaseConnector, потерянный при merge `-X ours`
+6. `connectors/url.py`, `retrieval/context_builder.py` — исправлены `\n` escape-последовательности
+7. `retrieval/vector.py` — исправлено `text` переопределение (конфликт с SQLAlchemy `text()`)
+
+**Test results (all 21 pass):**
+- `tests/test_models.py` — 13 passed (create all models, enum values, constraints)
+- `tests/test_repository.py` — 8 passed (CRUD + cascade + duplicate PK + pagination + count)
+
+**Files changed:**
+- `src/knowledge_engine/models/entity.py` — import timezone
+- `src/knowledge_engine/db/repository.py` — `populate_existing=True` in get()
+- `pyproject.toml` — TOML syntax, build-backend, pytest-asyncio mode
+- `docker-compose.yml` — pg16, removed Ollama
+
+---
+
 ## Все 9 issues реализованы!
 
 | # | Issue | PR | Статус |
@@ -199,3 +224,76 @@
 | 6 | Entity & Relation | [#15](https://github.com/honeywagonoperator/knowledge_agent/pull/15) |
 | 7 | Hybrid Retrieval | [#16](https://github.com/honeywagonoperator/knowledge_agent/pull/16) |
 
+---
+
+## 2026-06-17 — Архитектурный рефакторинг: LlamaIndex PropertyGraphIndex
+
+**Action:** Полная замена кастомных экстракторов/ретриверов на LlamaIndex PropertyGraphIndex.
+
+**Rationale:** LlamaIndex даёт из коробки chunking (SentenceSplitter), entity/relation extraction (SchemaLLMPathExtractor через LLM), vector search (SimpleVectorStore) и graph traversal — убирает 8 модулей кастомного кода.
+
+**Trade-offs:** Граф на диске (SimplePropertyGraphStore), не в PostgreSQL. PostgreSQL остаётся только для Sources + Documents (CLI). Вектора больше не в pgvector.
+
+### Удалено (8 файлов)
+- `models/knowledge_unit.py`, `models/entity.py`, `models/relation.py`
+- `extractors/knowledge.py`, `extractors/graph.py`, `extractors/__init__.py`
+- `retrieval/vector.py`, `retrieval/graph_expander.py`, `retrieval/context_builder.py`, `retrieval/service.py`
+
+### Создано
+- `src/knowledge_engine/index.py` — `KnowledgeIndex` (обёртка PropertyGraphIndex): init, insert_document, query, persist, stats
+
+### Изменено
+- `connectors/sync_service.py` — реализован `sync_source(connector)`: вызывает connector.sync(), затем index.insert_document() для каждого документа
+- `cli/main.py` — `ke query` → `index.query()` через OpenRouter; `ke sync` → настоящая синхронизация; `ke advise` → через index; `ke status` → без удалённых моделей; `ke graph_explore` → через property_graph_store
+- `tests/test_models.py` — сокращён до Source + Document (5 тестов)
+- `tests/test_repository.py` — Entity → Source (8 тестов)
+- `tests/conftest.py` — DROP TABLE для старых orphan-таблиц
+- `docker-compose.yml` — `pgvector/pg:16` → `postgres:16-alpine`
+- `models/__init__.py` — только Source, Document
+- `knowledge_engine_architecture.md` — полное обновление
+
+### Новая архитектура
+
+```
+ke sync → Connector → Document(PG) → index.insert(Document)
+                                        ├── SentenceSplitter
+                                        ├── OpenAIEmbedding (text-embedding-3-small)
+                                        ├── SchemaLLMPathExtractor
+                                        └── persist ./data/index/
+
+ke query → index.query("...")
+            ├── PropertyGraphIndex.as_retriever()
+            │     ├── VectorContextRetriever
+            │     └── LLMSynonymRetriever
+            └── OpenRouter GPT-4o-mini → ответ
+```
+
+### Тесты
+- `tests/test_models.py` — 5 passed
+- `tests/test_repository.py` — 8 passed
+- **Total: 13/13 passed**
+
+---
+
+## 2026-06-17 — Phase A-5/6/7 complete: All 51 tests green
+
+**Action:** Написаны тесты для connectors (14), KnowledgeIndex (11), CLI (13)
+
+**Results:** 51/51 passed (13 models + repo + 14 connectors + 11 index + 13 CLI)
+
+**Files added:**
+- `tests/test_connectors.py` — 14 тестов (Base, URL, Telegram, SyncService)
+- `tests/test_index.py` — 11 тестов (init/load, insert, query, persist, stats)
+- `tests/test_cli.py` — 13 тестов (add-source, sync, query, list-sources, status, graph-explore, advise)
+
+**Phase A Summary:**
+| Phase | Scope | Tests | Status |
+|-------|-------|-------|--------|
+| A-3 | Models | 5 | ✅ |
+| A-4 | Repository | 8 | ✅ |
+| A-5 | Connectors | 14 | ✅ |
+| A-6 | KnowledgeIndex | 11 | ✅ |
+| A-7 | CLI | 13 | ✅ |
+| **Total** | | **51** | **✅** |
+
+---

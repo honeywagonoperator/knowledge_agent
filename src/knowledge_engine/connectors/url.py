@@ -1,11 +1,14 @@
 import hashlib
-from urllib.parse import urlparse
+from datetime import UTC
+
 import httpx
 from bs4 import BeautifulSoup, Tag
-from knowledge_engine.models.source import Source
-from knowledge_engine.models.document import Document
-from knowledge_engine.db.session import AsyncSession
+
 from knowledge_engine.connectors.base import BaseConnector, SyncResult
+from knowledge_engine.db.session import AsyncSession
+from knowledge_engine.models.document import Document
+from knowledge_engine.models.source import Source
+
 
 class URLConnector(BaseConnector):
     def __init__(self, source: Source, session: AsyncSession) -> None:
@@ -25,8 +28,9 @@ class URLConnector(BaseConnector):
                         result.errors.append(f"Failed to fetch: {url}")
                         continue
 
+                    from sqlalchemy import select
                     existing = await self._session.execute(
-                        __import__("sqlalchemy").select(Document).where(Document.content_hash == doc.content_hash)
+                        select(Document).where(Document.content_hash == doc.content_hash)
                     )
                     if existing.scalar_one_or_none():
                         result.documents_skipped += 1
@@ -41,7 +45,8 @@ class URLConnector(BaseConnector):
         finally:
             await client.aclose()
 
-        self.source.last_sync = __import__("datetime").datetime.now(__import__("timezone", fromlist=["utc"]).utc)  # noqa
+        from datetime import datetime
+        self.source.last_sync = datetime.now(UTC)
         return result
 
     async def _fetch_and_parse(self, client: httpx.AsyncClient, url: str) -> Document | None:
@@ -60,8 +65,7 @@ class URLConnector(BaseConnector):
         if isinstance(title_tag, Tag):
             title = title_tag.get_text(strip=True)
 
-        text = soup.get_text(separator="
-", strip=True)
+        text = soup.get_text(separator="\n", strip=True)
         content_hash = hashlib.sha256(text.encode()).hexdigest()
 
         return Document(

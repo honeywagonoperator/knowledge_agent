@@ -1,17 +1,16 @@
 import asyncio
-from uuid import UUID
+import uuid
+
 import click
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from knowledge_engine.db.engine import dispose_engine
-from knowledge_engine.db.session import async_session_factory
+from rich.table import Table
+
 from knowledge_engine.db.repository import Repository
-from knowledge_engine.models.source import Source
+from knowledge_engine.db.session import async_session_factory
+from knowledge_engine.index import KnowledgeIndex
 from knowledge_engine.models.document import Document
-from knowledge_engine.models.knowledge_unit import KnowledgeUnit
-from knowledge_engine.models.entity import Entity, EntityType
-from knowledge_engine.models.relation import Relation
+from knowledge_engine.models.source import Source
 
 console = Console()
 
@@ -43,19 +42,36 @@ def add_source(url: str, source_type: str, name: str | None) -> None:
 @cli.command()
 @click.option("--source-id", required=True, help="Source UUID to sync")
 def sync(source_id: str) -> None:
-    """Synchronize a source (fetch, chunk, extract, graph)."""
-    console.print("[yellow]Sync requires the full pipeline. Use feat/url-connector branch.[/]")
-    console.print(f"Source ID: {source_id}")
+    """Synchronize a source (fetch, index, build graph)."""
+    async def _run():
+        from knowledge_engine.connectors.sync_service import SyncService
+        from knowledge_engine.connectors.url import URLConnector
+        factory = async_session_factory()
+        async with factory() as s:
+            repo = Repository(s, Source)
+            src = await repo.get(uuid.UUID(source_id))
+            if src is None:
+                console.print("[red]Source not found[/]")
+                return
+            connector = URLConnector(src, s)
+            index = KnowledgeIndex()
+            service = SyncService(s, index)
+            result = await service.sync_source(connector)
+            await s.commit()
+            console.print(f"[green]Sync complete:[/] {result.documents_created} created, {result.documents_skipped} skipped")
+            if result.errors:
+                for err in result.errors:
+                    console.print(f"[red]Error:[/] {err}")
+    asyncio.run(_run())
 
 
 @cli.command()
 @click.argument("query_str")
-@click.option("--expand/--no-expand", default=True)
-@click.option("--depth", default=1, help="Graph expansion depth")
-def query(query_str: str, expand: bool, depth: int) -> None:
+def query(query_str: str) -> None:
     """Ask a question against the knowledge base."""
-    console.print("[yellow]Query requires feat/hybrid-retrieval branch for full pipeline.[/]")
-    console.print(f"Question: {query_str}")
+    index = KnowledgeIndex()
+    answer = index.query(query_str)
+    console.print(f"[bold green]Answer:[/] {answer}")
 
 
 @cli.command()
@@ -63,41 +79,23 @@ def query(query_str: str, expand: bool, depth: int) -> None:
 @click.option("--depth", default=2, help="Graph traversal depth")
 def graph_explore(entity: str, depth: int) -> None:
     """Explore entity connections in the knowledge graph."""
-    async def _run():
-        factory = async_session_factory()
-        async with factory() as s:
-            from sqlalchemy import select, or_
-            entity_result = await s.execute(
-                select(Entity).where(Entity.name.ilike(f"%{entity}%"))
-            )
-            entities = entity_result.scalars().all()
-
-            if not entities:
-                console.print(f"[yellow]No entities found matching '{entity}'[/]")
-                return
-
-            table = Table(title=f"Entity: {entity}")
-            table.add_column("Entity ID", style="cyan")
-            table.add_column("Type", style="magenta")
-            table.add_column("Name")
-            table.add_column("Relations", style="green")
-
-            for ent in entities:
-                rel_result = await s.execute(
-                    select(Relation).where(
-                        or_(Relation.from_entity_id == ent.id,
-                            Relation.to_entity_id == ent.id)
-                    ).limit(10)
-                )
-                relations = rel_result.scalars().all()
-                rel_summary = ", ".join(
-                    f"{r.relation_type.value}" for r in relations
-                ) or "none"
-
-                table.add_row(ent.id, ent.type.value, ent.name, rel_summary)
-
-            console.print(table)
-    asyncio.run(_run())
+    index = KnowledgeIndex()
+    store = index._index.property_graph_store
+    if not hasattr(store, "graph") or not store.graph:
+        console.print("[yellow]No graph data available.[/]")
+        return
+    nodes = [n for n in store.graph.nodes if entity.lower() in n.lower()]
+    if not nodes:
+        console.print(f"[yellow]No entities found matching '{entity}'[/]")
+        return
+    table = Table(title=f"Entity: {entity}")
+    table.add_column("Entity", style="cyan")
+    table.add_column("Connected To", style="green")
+    table.add_column("Relation")
+    for n in nodes:
+        for edge in store.graph.edges(n, data=True):
+            table.add_row(n, edge[1], edge[2].get("label", "related"))
+    console.print(table)
 
 
 @cli.command()
@@ -137,28 +135,22 @@ def status() -> None:
         async with factory() as s:
             source_repo = Repository(s, Source)
             doc_repo = Repository(s, Document)
-            unit_repo = Repository(s, KnowledgeUnit)
-
-            from knowledge_engine.db.repository import Repository as Repo
-            entity_repo = Repo(s, Entity)
-            rel_repo = Repo(s, Relation)
 
             src_count = await source_repo.count()
             doc_count = await doc_repo.count()
-            unit_count = await unit_repo.count()
-            ent_count = await entity_repo.count()
-            rel_count = await rel_repo.count()
 
-            panel = Panel.fit(
-                f"[bold]Knowledge Engine Status[/]\n\n"
-                f"Sources:          {src_count}\n"
-                f"Documents:        {doc_count}\n"
-                f"Knowledge Units:  {unit_count}\n"
-                f"Entities:         {ent_count}\n"
-                f"Relations:        {rel_count}",
-                border_style="green",
-            )
-            console.print(panel)
+        index = KnowledgeIndex()
+        idx_stats = index.stats
+
+        panel = Panel.fit(
+            f"[bold]Knowledge Engine Status[/]\n\n"
+            f"Sources:          {src_count}\n"
+            f"Documents:        {doc_count}\n"
+            f"Graph Nodes:      {idx_stats['nodes']}\n"
+            f"Graph Relations:  {idx_stats['relations']}",
+            border_style="green",
+        )
+        console.print(panel)
     asyncio.run(_run())
 
 
@@ -170,6 +162,7 @@ def advise(model: str) -> None:
     console.print("[bold green]Knowledge Engine — Advise Mode[/]")
     console.print("[dim]Type 'exit' or 'quit' to end.[/]\n")
 
+    index = KnowledgeIndex()
     history: list[dict] = []
 
     async def _advise_loop():
@@ -182,26 +175,9 @@ def advise(model: str) -> None:
                 break
 
             history.append({"role": "user", "content": question})
-            answer = await _do_answer(question)
+            answer = index.query(question)
             history.append({"role": "assistant", "content": answer})
             console.print(f"[bold green]KE:[/] {answer}\n")
-
-    async def _do_answer(q: str) -> str:
-        factory = async_session_factory()
-        async with factory() as s:
-            from sqlalchemy import select
-            result = await s.execute(
-                select(KnowledgeUnit).where(
-                    KnowledgeUnit.content.ilike(f"%{q}%")
-                ).limit(3)
-            )
-            units = result.scalars().all()
-            if units:
-                ctx = "\n\n".join(
-                    f"[{u.domain}] {u.content[:300]}" for u in units
-                )
-                return f"Found {len(units)} relevant knowledge units.\n\n{ctx}"
-            return "No relevant knowledge found. Try adding a source first."
 
     asyncio.run(_advise_loop())
 

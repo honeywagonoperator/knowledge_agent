@@ -4,7 +4,7 @@
 
 **Knowledge Engine** — личный AI-агент, который собирает знания из Telegram-каналов и URL, превращает их в структурированные knowledge units, строит knowledge graph (entities + relations) и отвечает с обязательными ссылками на источники.
 
-**Стэк:** Python, PostgreSQL + pgvector, hybrid retrieval (vector + graph)
+**Стэк:** Python, PostgreSQL (Sources/Documents), LlamaIndex PropertyGraphIndex (вектора + граф на диске)
 
 Архитектура и стек технологий: `knowledge_engine_architecture.md`
 
@@ -36,6 +36,25 @@
 | `load skill vibe-coding` | Воркфлоу кодинга — когда использовать context7, sequential-thinking, serena |
 | `load skill github` | GitHub workflow — ветки, PR, issues, code review |
 
+## Known Issues & Workarounds
+
+### GitHub MCP Server не работает
+MCP сервер `@modelcontextprotocol/server-github` выдаёт auth error. Все GitHub операции выполняются через **REST API напрямую** (`github_create_branch`, `github_push_files`, `github_create_pull_request`, etc.) — они доступны как встроенные инструменты, `load skill github` не требуется.
+
+### Windows socks4 proxy ломает pip
+Системный прокси `socks4://127.0.0.1:10808` (читается через `urllib.request.getproxies()` из реестра Windows) блокирует установку пакетов. Workaround:
+```
+source .venv/Scripts/activate
+pip install -e ".[dev]" --no-build-isolation
+```
+с установленной переменной `NO_PROXY=*` в окружении.
+
+### pytest-asyncio
+Версия **0.24.0** форсирована (не 0.25+ из pyproject.toml) — 0.25+ вызывает event loop mismatch с asyncpg. Команда для запуска тестов:
+```
+python -m pytest tests/ -v
+```
+
 ---
 
 ## Workflow
@@ -61,6 +80,8 @@ github_create_pull_request({ head: "feat/<name>", base: "main", draft: true })
 ```
 
 **Жизненно важно:** каждая фича — отдельная ветка. Никаких коммитов в main.
+
+> **Note:** GitHub MCP server не работает — используй встроенные tools `github_create_branch`, `github_push_files`, `github_create_pull_request` напрямую, `load skill github` не требуется.
 
 ### 3. Планирование
 
@@ -94,7 +115,8 @@ github_create_pull_request({ head: "feat/<name>", base: "main", draft: true })
 - Юнит-тесты для новой логики
 - Интеграционное/функциональное тестирование (если нужно)
 - Прогнать тесты, убедиться что всё зелёное
-- Конкретный фреймворк и команда определяются после выбора стека
+- Фреймворк: pytest + pytest-asyncio 0.24.0
+- Команда: `python -m pytest tests/ -v` (см. Known Issues про pytest-asyncio)
 
 ### 6. Подтверждение
 

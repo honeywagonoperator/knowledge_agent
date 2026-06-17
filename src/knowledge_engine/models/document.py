@@ -1,6 +1,12 @@
 import uuid
-from sqlalchemy import String, Text, ForeignKey, UniqueConstraint; from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID; from knowledge_engine.models.base import Base, TimestampMixin, UUIDMixin
+
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from knowledge_engine.models.base import Base, TimestampMixin, UUIDMixin
+
+
 class Document(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "documents"
     source_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("sources.id", ondelete="CASCADE"), nullable=False)

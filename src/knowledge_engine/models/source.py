@@ -1,6 +1,13 @@
+import enum
 from datetime import datetime
-from sqlalchemy import String, Boolean, DateTime, Enum as SAEnum; from sqlalchemy.orm import Mapped, mapped_column
-from knowledge_engine.models.base import Base, TimestampMixin, UUIDMixin; import enum
+
+from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Enum as SAEnum
+from sqlalchemy.orm import Mapped, mapped_column
+
+from knowledge_engine.models.base import Base, TimestampMixin, UUIDMixin
+
+
 class SourceType(str, enum.Enum): TELEGRAM = "telegram"; URL = "url"
 class Source(UUIDMixin, TimestampMixin, Base):
     __tablename__ = "sources"

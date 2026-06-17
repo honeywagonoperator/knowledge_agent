@@ -1,4 +1,7 @@
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine; from knowledge_engine.db.config import DatabaseConfig
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+from knowledge_engine.db.config import DatabaseConfig
+
 _engine: AsyncEngine | None = None
 def create_engine(config: DatabaseConfig | None = None) -> AsyncEngine:
     global _engine; config = config or DatabaseConfig()

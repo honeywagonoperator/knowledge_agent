@@ -1,4 +1,7 @@
-from dataclasses import dataclass; import os
+import os
+from dataclasses import dataclass
+
+
 @dataclass(frozen=True)
 class DatabaseConfig:
     host: str = os.getenv("DB_HOST", "localhost"); port: int = int(os.getenv("DB_PORT", "5432"))

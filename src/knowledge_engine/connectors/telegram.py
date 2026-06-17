@@ -1,9 +1,11 @@
 import hashlib
 import os
-from knowledge_engine.models.source import Source
-from knowledge_engine.models.document import Document
-from knowledge_engine.db.session import AsyncSession
+from datetime import UTC
+
 from knowledge_engine.connectors.base import BaseConnector, SyncResult
+from knowledge_engine.db.session import AsyncSession
+from knowledge_engine.models.document import Document
+from knowledge_engine.models.source import Source
 
 
 class TelegramConnector(BaseConnector):
@@ -68,8 +70,8 @@ class TelegramConnector(BaseConnector):
         except Exception as e:
             result.errors.append(f"Telegram sync failed: {e}")
 
-        from datetime import datetime, timezone
-        self.source.last_sync = datetime.now(timezone.utc)
+        from datetime import datetime
+        self.source.last_sync = datetime.now(UTC)
         return result
 
     @staticmethod
