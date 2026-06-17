@@ -1,0 +1,14 @@
+# Node modules
+node_modules/
+
+# Opencode
+.opencode/node_modules/
+
+# Secrets
+.env
+*.key
+
+# OS
+build/
+dist/
+.FSS/
