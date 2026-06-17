@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=75.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+[project]
+name = "knowledge-engine"
+version = "0.1.0"
+description = "Knowledge Engine - personal AI agent with knowledge graph"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [{name = "honeywagonoperator"}]
+dependencies = [
+    "sqlalchemy[asyncio]>=2.0", "asyncpg>=0.30", "pgvector>=0.4",
+    "llama-index>=0.12", "httpx>=0.28", "beautifulsoup4>=4.12",
+    "python-telegram-bot[job-queue]>=21.0", "click>=8.1", "alembic>=1.14",
+]
+[project.optional-dependencies]
+dev = ["ruff>=0.9", "mypy>=1.15", "pytest>=8.0", "pytest-asyncio>=0.25"]
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["knowledge_engine*"]
+[tool.ruff]
+line-length = 100; target-version = "py312"
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+[tool.mypy]
+strict = true; python_version = "3.12"
+explicit_package_bases = true; namespace_packages = true

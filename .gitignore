@@ -1,14 +1,17 @@
-# Node modules
-node_modules/
-
-# Opencode
-.opencode/node_modules/
-
-# Secrets
-.env
-*.key
-
-# OS
-build/
+__pycache__/
+*.py[cod]
+*.egg-info/
 dist/
-.FSS/
+build/
+.eggs/
+venv/
+.venv/
+.env/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
